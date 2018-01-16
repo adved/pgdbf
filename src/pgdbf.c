@@ -30,7 +30,7 @@
 #include <sys/types.h>
 
 #include "pgdbf.h"
-#define STANDARDOPTS "cCdDeEhm:i:nNpPqQrRtTuU"
+#define STANDARDOPTS "cCdDeEhm:i:nNo:pPqQrRtTuU"
 
 int main(int argc, char **argv) {
     /* Describing the DBF file */
@@ -121,6 +121,8 @@ int main(int argc, char **argv) {
     char basename[MAXCOLUMNNAMESIZE];
     int serial;
 
+    char    *optusetablename = NULL;
+
 #if defined(HAVE_ICONV)
     /* Character encoding stuff */
     char *optinputcharset = NULL;
@@ -183,6 +185,9 @@ int main(int argc, char **argv) {
         case 'N':
             optnumericasnumeric = 0;
             break;
+        case 'o':
+            optusetablename = optarg;
+            break;
         case 'p':
             optshowprogress = 1;
             break;
@@ -238,9 +243,9 @@ int main(int argc, char **argv) {
     if(optexitcode != -1) {
         printf(
 #if defined(HAVE_ICONV)
-               "Usage: %s [-cCdDeEhtTuU] [-s encoding] [-m memofilename] [-i fieldname1,fieldname2,fieldnameN] filename [indexcolumn ...]\n"
+               "Usage: %s [-cCdDeEhtTuU] [-s encoding] [-m memofilename] [-i fieldname1,fieldname2,fieldnameN] [-o tablename] filename [indexcolumn ...]\n"
 #else
-               "Usage: %s [-cCdDeEhtTuU] [-m memofilename] [-i fieldname1,fieldname2,fieldnameN] filename [indexcolumn ...]\n"
+               "Usage: %s [-cCdDeEhtTuU] [-m memofilename] [-i fieldname1,fieldname2,fieldnameN] [-o tablename] filename [indexcolumn ...]\n"
 #endif
                "Convert the named XBase file into PostgreSQL format\n"
                "\n"
@@ -255,12 +260,13 @@ int main(int argc, char **argv) {
                "  -m  the name of the associated memo file (if necessary)\n"
                "  -n  use type 'NUMERIC' for NUMERIC fields (default)\n"
                "  -N  use type 'TEXT' for NUMERIC fields\n"
-               "  -r  remove padding at the end of TEXT and VARCHAR fields (default)\n"
-               "  -R  keep padding at the end of TEXT and VARCHAR fields\n"
+               "  -o  output table name\n"
                "  -p  show a progress bar during processing\n"
                "  -P  do not show a progress bar\n"
                "  -q  enclose the table name in quotation marks whenever used in statements\n"
                "  -Q  do not enclose the table name in quotation marks (default)\n"
+               "  -r  remove padding at the end of TEXT and VARCHAR fields (default)\n"
+               "  -R  keep padding at the end of TEXT and VARCHAR fields\n"
 #if defined(HAVE_ICONV)
                "  -s  the encoding used in the file, to be converted to UTF-8\n"
 #endif
@@ -307,9 +313,13 @@ int main(int argc, char **argv) {
     }
 #endif
 
-    /* Calculate the table's name based on the DBF filename */
+    /* Calculate the table's name based on the DBF filename or optusetablename */
     dbffilename = argv[optind];
-    tablename = malloc(strlen(dbffilename) + 1);
+    if (optusetablename == NULL)
+        tablename = malloc(strlen(dbffilename) + 1);
+    else 
+        tablename = malloc(strlen(optusetablename) + 1);
+
     if(tablename == NULL) {
         exitwitherror("Unable to allocate the tablename buffer", 1);
     }
@@ -318,19 +328,27 @@ int main(int argc, char **argv) {
      * is used for other things, like creating the names of indexes. Despite
      * its name, baretablename may be surrounded by quote marks if the "-q"
      * option for optusequotedtablename is given. */
-    baretablename = malloc(strlen(dbffilename) + 1 + optusequotedtablename * 2);
+    if (optusetablename == NULL)
+        baretablename = malloc(strlen(dbffilename) + 1 + optusequotedtablename * 2);
+    else
+        baretablename = malloc(strlen(optusetablename) + 1 + optusequotedtablename * 2);
+        
     if(baretablename == NULL) {
         exitwitherror("Unable to allocate the bare tablename buffer", 1);
     }
     /* Find the first character after the final slash, or the first
      * character of the filename if no slash is present, and copy from that
      * point to the period in the extension into the tablename string. */
-    for(s = dbffilename + strlen(dbffilename) - 1; s != dbffilename; s--) {
-        if(*s == '/') {
-            s++;
-            break;
+    if (optusetablename == NULL) {
+        for(s = dbffilename + strlen(dbffilename) - 1; s != dbffilename; s--) {
+            if(*s == '/') {
+                s++;
+                break;
+            }
         }
     }
+    else 
+        s = optusetablename;
     /* Create tablename and baretablename at the same time. */
     t = tablename;
     u = baretablename;

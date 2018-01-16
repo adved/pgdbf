@@ -30,7 +30,7 @@
 #include <sys/types.h>
 
 #include "pgdbf.h"
-#define STANDARDOPTS "cCdDeEhm:i:nNo:pPqQrRtTuU"
+#define STANDARDOPTS "cCdDeEhm:i:nNo:pPqQrRtTuUx"
 
 int main(int argc, char **argv) {
     /* Describing the DBF file */
@@ -112,6 +112,7 @@ int main(int argc, char **argv) {
     int     optusetransaction = 1;
     int     optusetruncatetable = 0;
     int     opttrimpadding = 1;
+    int     optusestdin = 0;
 
     /* Describing the PostgreSQL table */
     char *tablename;
@@ -225,6 +226,9 @@ int main(int argc, char **argv) {
         case 'U':
             optusetruncatetable = 0;
             break;
+        case 'x':
+            optusestdin = 1;
+            break;
         case 'h':
         default:
             /* If we got here because someone requested '-h', exit
@@ -236,8 +240,13 @@ int main(int argc, char **argv) {
 
     /* Checking that the user specified a filename, unless we're already
      * exiting for other reasons in which case it doesn't matter */
-    if(optexitcode != EXIT_SUCCESS && optind > (argc - 1)) {
+    if(optexitcode != EXIT_SUCCESS && optind > (argc - 1) && optusestdin == 0) {
         optexitcode = EXIT_FAILURE;
+    }
+    
+    if (optusestdin == 1 && optusetablename == NULL)
+    {
+        exitwitherror("table name is not specified", 1);
     }
 
     if(optexitcode != -1) {
@@ -274,6 +283,7 @@ int main(int argc, char **argv) {
                "  -T  do not use an enclosing transaction\n"
                "  -u  issue a 'TRUNCATE' command before inserting data\n"
                "  -U  do not issue a 'TRUNCATE' command before inserting data (default)\n"
+               "  -x  use stdin\n"
                "\n"
 #if defined(HAVE_ICONV)
                "If you don't specify an encoding via '-s', the data will be printed as is.\n"
@@ -366,7 +376,11 @@ int main(int argc, char **argv) {
     *u = '\0';
 
     /* Get the DBF header */
-    dbffile = fopen(dbffilename, "rb");
+    if (optusestdin == 1)
+        dbffile = stdin;
+    else
+        dbffile = fopen(dbffilename, "rb");
+    
     if(dbffile == NULL) {
         exitwitherror("Unable to open the DBF file", 1);
     }
@@ -428,12 +442,16 @@ int main(int argc, char **argv) {
     }
 
     /* Skip the database container if necessary */
-    if(fseek(dbffile, skipbytes, SEEK_CUR)) {
-        exitwitherror("Unable to seek in the DBF file", 1);
+    int skipc, skipidx;
+    for (skipidx = 0; skipidx < skipbytes; skipidx++)
+    {
+        skipc = getc (dbffile);
+        if (ferror(dbffile) || feof(dbffile))
+            exitwitherror("Unable to skip database container", 1); 
     }
 
     /* Make sure we're at the right spot before continuing */
-    if(ftell(dbffile) != littleint16_t(dbfheader.headerlength)) {
+    if(optusestdin == 0 && ftell(dbffile) != littleint16_t(dbfheader.headerlength)) {
         exitwitherror("At an unexpected offset in the DBF file", 0);
     }
 
@@ -862,7 +880,13 @@ int main(int argc, char **argv) {
     }
 
     /* Generate the indexes */
-    for(i = optind + 1; i < argc; i++ ){
+    int indexopt;
+    if (optusestdin == 0)
+        i = optind + 1;
+    else
+        i = optind;
+        
+    for(; i < argc; i++ ){
         printf("CREATE INDEX %s_", tablename);
         for(s = argv[i]; *s; s++) {
             if(isalnum(*s)) {

@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
     for (skipidx = 0; skipidx < skipbytes; skipidx++)
     {
         skipc = getc (dbffile);
-        if (ferror(dbffile) || feof(dbffile))
+        if (ferror(dbffile))
             exitwitherror("Unable to skip database container", 1); 
     }
 

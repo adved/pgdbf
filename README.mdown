@@ -123,6 +123,14 @@ Indices are automatically created if you specify the columns (or expressions!) y
 
 will create three indices on the new foo table: one each for the rowid and price columns, and one for the substr() expression. It tries to give each index a reasonable name.
 
+Using stdin as a source allows to import files directly from the archive or from the network. For example,
+
+    7z e -so compressed.zip table.dbf | pgdbf -x -o tablename | psql targetdatabase
+    
+or 
+
+    curl host/table.dbf | pgdbf -x -o tablename | psql targetdatabase
+
 # Note about character encodings
 
 Older versions of PostgreSQL defaulted to the SQL_ASCII character encoding which accepted pretty much any string of bytes you could throw at it. Newer versions of PostgreSQL default to using UTF-8 encoding. PgDBF outputs data exactly as it's stored in the XBase tables, and this can result in dumps that PostgreSQL can't directly import.
